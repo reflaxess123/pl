@@ -58,7 +58,7 @@ class TelegramUserBot:
         self.hide_client = ProxyAPIClient(system_prompt=self.hide_system_prompt)
         
         # Паттерн для команд
-        self.command_pattern = re.compile(r'^@gpt-(.+)', re.IGNORECASE | re.DOTALL)
+        self.command_pattern = re.compile(r'^@gpt\s+(.+)', re.IGNORECASE | re.DOTALL)
         
     async def start(self):
         """Запуск userbot"""
@@ -68,7 +68,7 @@ class TelegramUserBot:
         
         me = await self.client.get_me()
         print(f"✅ Авторизован как: {me.first_name} (@{me.username})")
-        print("📱 UserBot активен! Используйте @gpt-[ваша команда] в любом чате")
+        print("📱 UserBot активен! Используйте @gpt [ваша команда] в любом чате")
         print("🛑 Для остановки нажмите Ctrl+C")
         
         # Регистрируем обработчик сообщений
@@ -135,21 +135,16 @@ class TelegramUserBotAdvanced(TelegramUserBot):
     def __init__(self):
         super().__init__()
         
-        # Расширенные паттерны команд
+        # Расширенные паттерны команд  
         self.patterns = {
-            # Команды с контекстом и hide: @gpt-context50-hide-rewrite текст
-            'context_hide': re.compile(r'^@gpt-context(\d+)-hide-(.+)', re.IGNORECASE | re.DOTALL),
-            # Команды с контекстом: @gpt-context50-rewrite текст  
-            'context': re.compile(r'^@gpt-context(\d+)-(.+)', re.IGNORECASE | re.DOTALL),
-            # Обычные команды с hide: @gpt-hide-rewrite текст
-            'hide': re.compile(r'^@gpt-hide-(.+)', re.IGNORECASE | re.DOTALL),
-            # Обычные команды
-            'rewrite': re.compile(r'^@gpt-rewrite\s+(.+)', re.IGNORECASE | re.DOTALL),
-            'translate': re.compile(r'^@gpt-translate\s+(.+)', re.IGNORECASE | re.DOTALL),
-            'explain': re.compile(r'^@gpt-explain\s+(.+)', re.IGNORECASE | re.DOTALL),
-            'fix': re.compile(r'^@gpt-fix\s+(.+)', re.IGNORECASE | re.DOTALL),
-            'short': re.compile(r'^@gpt-short\s+(.+)', re.IGNORECASE | re.DOTALL),
-            'general': re.compile(r'^@gpt-(.+)', re.IGNORECASE | re.DOTALL),
+            # Команды с контекстом и hide: @gpt-context50-hide команда
+            'context_hide': re.compile(r'^@gpt-context(\d+)-hide\s+(.+)', re.IGNORECASE | re.DOTALL),
+            # Команды с контекстом: @gpt-context50 команда
+            'context': re.compile(r'^@gpt-context(\d+)\s+(.+)', re.IGNORECASE | re.DOTALL),
+            # Обычные команды с hide: @gpt-hide команда
+            'hide': re.compile(r'^@gpt-hide\s+(.+)', re.IGNORECASE | re.DOTALL),
+            # Обычные команды: @gpt команда
+            'general': re.compile(r'^@gpt\s+(.+)', re.IGNORECASE | re.DOTALL),
         }
     
     async def _process_message(self, event):
