@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  pl-app:
+    build: .
+    container_name: pl_application
+    restart: unless-stopped
+    volumes:
+      # Монтируем session файл для обновления сессии
+      - ./session.session:/app/session.session
+      # Можно монтировать .env файл для изменения конфигурации без пересборки
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Команды для различных режимов работы:
+
+    # Для интерактивного чата:
+    # command: ["python", "-m", "pl.cli", "chat"]
+
+    # Для проверки баланса:
+    # command: ["python", "-m", "pl.cli", "balance"]
+
+    # Для запуска Telegram бота:
+    command: ["python", "-m", "pl.cli", "telegram"]
+
+    # Для расширенного Telegram бота:
+    # command: ["python", "-m", "pl.cli", "telegram", "--advanced"]
+
+    # Для простого запроса:
+    # command: ["python", "-m", "pl.cli", "ask", "Привет! Как дела?"]
+
+    stdin_open: true
+    tty: true
+
+  # Альтернативный сервис для интерактивного режима
+  pl-interactive:
+    build: .
+    container_name: pl_interactive
+    volumes:
+      - ./session.session:/app/session.session
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "-m", "pl.cli", "chat"]
+    stdin_open: true
+    tty: true
+    profiles: ["interactive"]
