@@ -1,47 +1,40 @@
 version: "3.8"
 
 services:
-  pl-app:
+  pl-bot:
     build: .
-    container_name: pl_application
+    container_name: pl-telegram-bot
     restart: unless-stopped
-    volumes:
-      # Монтируем session файл для обновления сессии
-      - ./session.session:/app/session.session
-      # Можно монтировать .env файл для изменения конфигурации без пересборки
-      - ./.env:/app/.env
     environment:
-      - PYTHONUNBUFFERED=1
-    # Команды для различных режимов работы:
-
-    # Для интерактивного чата:
-    # command: ["python", "-m", "pl.cli", "chat"]
-
-    # Для проверки баланса:
-    # command: ["python", "-m", "pl.cli", "balance"]
-
-    # Для запуска Telegram бота:
-    command: ["python", "-m", "pl.cli", "telegram"]
-
-    # Для расширенного Telegram бота:
-    # command: ["python", "-m", "pl.cli", "telegram", "--advanced"]
-
-    # Для простого запроса:
-    # command: ["python", "-m", "pl.cli", "ask", "Привет! Как дела?"]
-
+      - PROXY_API_KEY=${PROXY_API_KEY}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - SYSTEM_PROMPT=${SYSTEM_PROMPT}
+    volumes:
+      # Монтируем директорию для сохранения сессии Telegram
+      - ./session_data:/app/session_data
     stdin_open: true
     tty: true
+    # Для возможности интерактивного ввода при первом запуске
+    profiles:
+      - production
 
-  # Альтернативный сервис для интерактивного режима
-  pl-interactive:
+  # Сервис для разработки с возможностью интерактивного режима
+  pl-dev:
     build: .
-    container_name: pl_interactive
-    volumes:
-      - ./session.session:/app/session.session
-      - ./.env:/app/.env
+    container_name: pl-dev
     environment:
-      - PYTHONUNBUFFERED=1
-    command: ["python", "-m", "pl.cli", "chat"]
+      - PROXY_API_KEY=${PROXY_API_KEY}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - SYSTEM_PROMPT=${SYSTEM_PROMPT}
+    volumes:
+      - .:/app
+      - ./session_data:/app/session_data
     stdin_open: true
     tty: true
-    profiles: ["interactive"]
+    command: /bin/bash
+    profiles:
+      - dev

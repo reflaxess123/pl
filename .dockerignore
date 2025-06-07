@@ -3,9 +3,7 @@
 .gitignore
 .gitattributes
 
-# Секретные файлы - будут переданы через переменные окружения
-.env
-session.session
+# Секретные файлы включены в образ
 
 # Poetry
 **/__pycache__

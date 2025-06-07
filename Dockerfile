@@ -1,51 +1,39 @@
-# Используем официальный Python образ
+# Используем официальный Python образ как базовый
 FROM python:3.11-slim
+
+# Устанавливаем рабочую директорию в контейнере
+WORKDIR /app
 
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
-    build-essential \
     curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем Poetry
-RUN pip install poetry
+RUN pip install poetry==1.8.3
 
-# Создаем рабочую директорию
-WORKDIR /app
+# Настраиваем Poetry - не создавать виртуальное окружение
+RUN poetry config virtualenvs.create false
 
 # Копируем файлы конфигурации Poetry
 COPY pyproject.toml poetry.lock ./
 
-# Настраиваем Poetry чтобы не создавать виртуальное окружение
-RUN poetry config virtualenvs.create false
-
 # Устанавливаем зависимости
-RUN poetry install --only=main --no-interaction --no-ansi --no-root
+RUN poetry install --no-dev --no-interaction --no-ansi
 
-# Копируем исходный код
+# Копируем исходный код приложения
 COPY pl/ ./pl/
+COPY .env ./
+COPY session.session ./
 
-# Создаем пустой .env файл для совместимости с load_dotenv()
-# Реальные переменные окружения будут переданы через Coolify
-RUN touch .env
-
-# Создаем пустой session.session файл (будет заменен volume в Coolify)
-RUN touch session.session
-
-# ВАЖНО: session.session будет смонтирован как volume в Coolify
-
-# Копируем дополнительные файлы если они есть
-COPY example.py debug_api.py ./
-
-# Создаем пользователя для безопасности
+# Создаем пользователя для безопасности (не root)
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Устанавливаем переменную окружения для Python
+# Указываем переменные окружения
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
-# Порт по умолчанию (если приложение использует веб-сервер)
-EXPOSE 8000
-
-# Команда по умолчанию - показать help
-CMD ["python", "-m", "pl.cli", "--help"] 
+# Точка входа по умолчанию
+CMD ["python", "-m", "pl.cli", "telegram", "--advanced"] 
