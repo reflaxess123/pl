@@ -1,6 +1,30 @@
 version: "3.8"
 
-services:"  p"-bot:
+services:
+  # Веб интерфейс для управления ботом
+  pl-web:
+    build: .
+    container_name: pl-web-interface
+    restart: unless-stopped
+    environment:
+      - PROXY_API_KEY=${PROXY_API_KEY}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - SYSTEM_PROMPT=${SYSTEM_PROMPT}
+    volumes:
+      # Монтируем директорию для сохранения сессии Telegram
+      - ./session_data:/app/session_data
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    stdin_open: true
+    tty: true
+    profiles:
+      - web
+
+  # Оригинальный бот (только командная строка)
+  pl-bot:
     build: .
     container_name: pl-telegram-bot
     restart: unless-stopped
@@ -15,9 +39,9 @@ services:"  p"-bot:
       - ./session_data:/app/session_data
     stdin_open: true
     tty: true
-    # Для возможности интерактивного ввода при первом запуске
+    command: ["python", "-m", "pl.cli", "telegram", "--advanced"]
     profiles:
-      - production
+      - cli
 
   # Сервис для разработки с возможностью интерактивного режима
   pl-dev:
@@ -32,9 +56,10 @@ services:"  p"-bot:
     volumes:
       - .:/app
       - ./session_data:/app/session_data
+    ports:
+      - "8000:8000"
     stdin_open: true
     tty: true
     command: /bin/bash
     profiles:
       - dev
- 

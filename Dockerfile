@@ -24,8 +24,14 @@ RUN poetry install --no-dev --no-interaction --no-ansi
 
 # Копируем исходный код приложения
 COPY pl/ ./pl/
+COPY templates/ ./templates/
+COPY start_web.py ./
+COPY docker-start.py ./
 COPY .env ./
 COPY session.session ./
+
+# Создаем директорию для данных
+RUN mkdir -p /app/data
 
 # Создаем пользователя для безопасности (не root)
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -35,5 +41,8 @@ USER appuser
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Точка входа по умолчанию
-CMD ["python", "-m", "pl.cli", "telegram", "--advanced"] 
+# Открываем порт для веб интерфейса
+EXPOSE 8000
+
+# Точка входа по умолчанию - веб интерфейс
+CMD ["python", "docker-start.py"] 
