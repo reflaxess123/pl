@@ -44,6 +44,11 @@ def main():
     ask_parser.add_argument('--top-p', type=float, default=0.95,
                            help='Контроль разнообразия ответа (по умолчанию 0.95)')
     
+    # Команда telegram
+    telegram_parser = subparsers.add_parser('telegram', help='Запуск Telegram UserBot')
+    telegram_parser.add_argument('--advanced', action='store_true',
+                                help='Использовать расширенную версию с дополнительными командами')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -70,6 +75,24 @@ def main():
                 top_p=args.top_p
             )
             print(f"\n🤖 Ответ: {response}")
+            
+        elif args.command == 'telegram':
+            import asyncio
+            from pl.telegram_client import TelegramUserBot, TelegramUserBotAdvanced
+            
+            async def run_telegram():
+                if args.advanced:
+                    bot = TelegramUserBotAdvanced()
+                else:
+                    bot = TelegramUserBot()
+                
+                try:
+                    await bot.start()
+                except KeyboardInterrupt:
+                    print("\n🛑 Получен сигнал остановки...")
+                    await bot.stop()
+            
+            asyncio.run(run_telegram())
             
     except Exception as e:
         print(f"❌ Ошибка: {e}")
