@@ -1,7 +1,6 @@
 version: "3.8"
 
-services:
-  pl-bot:
+services:"  p"-bot:
     build: .
     container_name: pl-telegram-bot
     restart: unless-stopped
@@ -38,3 +37,4 @@ services:
     command: /bin/bash
     profiles:
       - dev
+ 
