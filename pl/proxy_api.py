@@ -15,12 +15,13 @@ load_dotenv()
 class ProxyAPIClient:
     """Клиент для работы с ProxyAPI GPT-4o mini"""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, system_prompt: Optional[str] = None):
         """
         Инициализация клиента
         
         Args:
             api_key: API ключ. Если не указан, берется из переменной окружения PROXY_API_KEY
+            system_prompt: Системный промпт. Если не указан, используется стандартный
         """
         self.api_key = api_key or os.getenv('PROXY_API_KEY')
         if not self.api_key:
@@ -28,6 +29,14 @@ class ProxyAPIClient:
         
         self.base_url = "https://api.proxyapi.ru"
         self.model = "gpt-4o-mini"
+        
+        # Системный промпт
+        self.system_prompt = system_prompt or os.getenv('SYSTEM_PROMPT') or (
+            "Ты - персональный ассистент пользователя в Telegram. "
+            "Ты работаешь от имени пользователя и помогаешь ему с различными задачами. "
+            "Твоя цель - выполнять команды точно и качественно, писать естественно и по делу. "
+            "Отвечай кратко и по существу, избегай излишних объяснений, если не просят."
+        )
         
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -72,14 +81,21 @@ class ProxyAPIClient:
         """
         url = f"{self.base_url}/openai/v1/chat/completions"
         
+        # Формируем сообщения с системным промптом
+        messages = [
+            {
+                "role": "system",
+                "content": self.system_prompt
+            },
+            {
+                "role": "user", 
+                "content": prompt
+            }
+        ]
+        
         payload = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "top_p": top_p

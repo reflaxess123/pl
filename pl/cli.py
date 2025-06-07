@@ -18,12 +18,18 @@ def main():
   python -m pl.cli balance                        # Проверить баланс
   python -m pl.cli ask "Привет, как дела?"        # Одиночный запрос
   python -m pl.cli ask "Объясни квантовую физику" --max-tokens 500
+  python -m pl.cli telegram --advanced            # Telegram UserBot
         """
     )
     
     parser.add_argument(
         '--api-key',
         help='API ключ ProxyAPI (можно также задать через переменную окружения PROXY_API_KEY)'
+    )
+    
+    parser.add_argument(
+        '--system-prompt',
+        help='Кастомный системный промпт для настройки поведения ИИ'
     )
     
     subparsers = parser.add_subparsers(dest='command', help='Доступные команды')
@@ -57,7 +63,7 @@ def main():
     
     try:
         # Создаем клиент
-        client = ProxyAPIClient(api_key=args.api_key)
+        client = ProxyAPIClient(api_key=args.api_key, system_prompt=args.system_prompt)
         
         if args.command == 'chat':
             client.chat()
