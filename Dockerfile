@@ -25,8 +25,14 @@ RUN poetry install --only=main --no-interaction --no-ansi --no-root
 # Копируем исходный код
 COPY pl/ ./pl/
 
+# Создаем пустой .env файл для совместимости с load_dotenv()
+# Реальные переменные окружения будут переданы через Coolify
+RUN touch .env
+
+# Создаем пустой session.session файл (будет заменен volume в Coolify)
+RUN touch session.session
+
 # ВАЖНО: session.session будет смонтирован как volume в Coolify
-# .env файл НЕ копируем - используем переменные окружения Coolify
 
 # Копируем дополнительные файлы если они есть
 COPY example.py debug_api.py ./
