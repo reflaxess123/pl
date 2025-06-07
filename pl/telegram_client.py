@@ -34,19 +34,28 @@ class TelegramUserBot:
         # Создаем Telegram клиент
         self.client = TelegramClient('session', int(self.api_id), self.api_hash)
         
-        # Системный промпт для Telegram
-        telegram_system_prompt = (
+        # Системные промпты для разных режимов
+        self.normal_system_prompt = (
             "Ты - персональный ассистент пользователя в Telegram. "
-            "Ты работаешь от имени пользователя и помогаешь ему с различными задачами. "
-            "ВАЖНО: Если в запросе есть 'Контекст беседы:', то ты ДОЛЖЕН анализировать и использовать эту информацию. "
-            "Это реальные сообщения из чата, которые ты можешь и должен анализировать. "
-            "Когда просят найти информацию в контексте - внимательно изучи предоставленные сообщения и ответь на основе них. "
-            "Отвечай кратко и по делу, избегай фраз вроде 'как ИИ-ассистент' или 'я не могу'. "
-            "Пиши естественно, как писал бы сам пользователь."
+            "Ты помогаешь пользователю объяснять информацию собеседникам в чате. "
+            "ВАЖНО: Если в запросе есть 'Контекст беседы:', анализируй и используй эту информацию. "
+            "Это реальные сообщения из чата. Отвечай так, как будто объясняешь двоим участникам беседы. "
+            "Говори от третьего лица, объясняй ситуацию, суммируй информацию для присутствующих. "
+            "Отвечай кратко и по делу, избегай фраз 'как ИИ-ассистент'."
         )
         
-        # ProxyAPI клиент
-        self.proxy_client = ProxyAPIClient(system_prompt=telegram_system_prompt)
+        self.hide_system_prompt = (
+            "Ты - пользователь в Telegram чате. "
+            "Ты отвечаешь ОТ ЛИЦА пользователя, как будто это он сам пишет. "
+            "ВАЖНО: Если в запросе есть 'Контекст беседы:', анализируй и используй эту информацию. "
+            "Пиши в первом лице, используй разговорный стиль, как настоящий человек. "
+            "Отвечай кратко, естественно, избегай формальных фраз. "
+            "Ты НЕ ассистент, ты сам пользователь!"
+        )
+        
+        # ProxyAPI клиенты для разных режимов
+        self.normal_client = ProxyAPIClient(system_prompt=self.normal_system_prompt)
+        self.hide_client = ProxyAPIClient(system_prompt=self.hide_system_prompt)
         
         # Паттерн для команд
         self.command_pattern = re.compile(r'^@gpt-(.+)', re.IGNORECASE | re.DOTALL)
@@ -99,8 +108,10 @@ class TelegramUserBot:
                         top_p=0.9
                     )
                     
-                    # Редактируем сообщение с ответом
-                    await event.edit(response)
+                    # Показываем исходный запрос + ответ
+                    original_text = event.message.message
+                    full_response = f"{original_text}\n\nОтвет GPT:\n{response}"
+                    await event.edit(full_response)
                     print(f"✅ Ответ отправлен: {response[:100]}...")
                     
                 except Exception as e:
@@ -126,12 +137,12 @@ class TelegramUserBotAdvanced(TelegramUserBot):
         
         # Расширенные паттерны команд
         self.patterns = {
-            # Команды с контекстом: @gpt-context50-open-rewrite текст
-            'context_open': re.compile(r'^@gpt-context(\d+)-open-(.+)', re.IGNORECASE | re.DOTALL),
+            # Команды с контекстом и hide: @gpt-context50-hide-rewrite текст
+            'context_hide': re.compile(r'^@gpt-context(\d+)-hide-(.+)', re.IGNORECASE | re.DOTALL),
             # Команды с контекстом: @gpt-context50-rewrite текст  
             'context': re.compile(r'^@gpt-context(\d+)-(.+)', re.IGNORECASE | re.DOTALL),
-            # Обычные команды с open: @gpt-open-rewrite текст
-            'open': re.compile(r'^@gpt-open-(.+)', re.IGNORECASE | re.DOTALL),
+            # Обычные команды с hide: @gpt-hide-rewrite текст
+            'hide': re.compile(r'^@gpt-hide-(.+)', re.IGNORECASE | re.DOTALL),
             # Обычные команды
             'rewrite': re.compile(r'^@gpt-rewrite\s+(.+)', re.IGNORECASE | re.DOTALL),
             'translate': re.compile(r'^@gpt-translate\s+(.+)', re.IGNORECASE | re.DOTALL),
@@ -154,22 +165,22 @@ class TelegramUserBotAdvanced(TelegramUserBot):
                 if match:
                     print(f"🔍 Найдена команда типа: {command_type}")
                     
-                    if command_type == 'context_open':
-                        # Обрабатываем команду с контекстом и флагом open
+                    if command_type == 'context_hide':
+                        # Обрабатываем команду с контекстом и флагом hide
                         context_count = int(match.group(1))
                         command_text = match.group(2).strip()
-                        await self._handle_context_command(event, context_count, command_text, open_mode=True)
+                        await self._handle_context_command(event, context_count, command_text, hide_mode=True)
                     elif command_type == 'context':
-                        # Обрабатываем команду с контекстом
+                        # Обрабатываем команду с контекстом (обычный режим)
                         context_count = int(match.group(1))
                         command_text = match.group(2).strip()
-                        await self._handle_context_command(event, context_count, command_text, open_mode=False)
-                    elif command_type == 'open':
-                        # Обрабатываем команду с флагом open
+                        await self._handle_context_command(event, context_count, command_text, hide_mode=False)
+                    elif command_type == 'hide':
+                        # Обрабатываем команду с флагом hide
                         command_text = match.group(1).strip()
-                        await self._handle_open_command(event, command_text)
+                        await self._handle_hide_command(event, command_text)
                     else:
-                        # Обычная команда без контекста
+                        # Обычная команда (показываем запрос + ответ)
                         await self._handle_command(event, command_type, match.group(1).strip())
                     return
             
@@ -232,9 +243,9 @@ class TelegramUserBotAdvanced(TelegramUserBot):
             print(f"⚠️ Ошибка получения контекста: {e}")
             return ""
     
-    async def _handle_context_command(self, event, context_count: int, command_text: str, open_mode: bool = False):
+    async def _handle_context_command(self, event, context_count: int, command_text: str, hide_mode: bool = False):
         """Обработка команды с контекстом"""
-        mode_text = "open " if open_mode else ""
+        mode_text = "hide " if hide_mode else ""
         print(f"\n📝 Команда с контекстом [{context_count}] {mode_text}: {command_text[:50]}...")
         
         # Ограничиваем контекст разумными пределами
@@ -280,23 +291,25 @@ class TelegramUserBotAdvanced(TelegramUserBot):
         # Показываем индикатор набора текста
         async with self.client.action(event.chat_id, 'typing'):
             try:
-                response = self.proxy_client.generate_text(
+                # Выбираем правильный клиент в зависимости от режима
+                client = self.hide_client if hide_mode else self.normal_client
+                
+                response = client.generate_text(
                     final_prompt,
                     temperature=0.7,
                     max_tokens=1200,  # Больше токенов для контекста
                     top_p=0.9
                 )
                 
-                # Редактируем или дополняем сообщение в зависимости от режима
-                if open_mode:
-                    # Режим open: сохраняем исходный текст + добавляем ответ
+                # В режиме hide заменяем сообщение только ответом
+                if hide_mode:
+                    await event.edit(response)
+                    print(f"✅ Ответ с контекстом (hide режим) отправлен: {response[:100]}...")
+                else:
+                    # Обычный режим: сохраняем исходный текст + добавляем ответ  
                     original_text = event.message.message
                     full_response = f"{original_text}\n\nОтвет GPT:\n{response}"
                     await event.edit(full_response)
-                    print(f"✅ Ответ с контекстом (open режим) отправлен: {response[:100]}...")
-                else:
-                    # Обычный режим: заменяем сообщение ответом
-                    await event.edit(response)
                     print(f"✅ Ответ с контекстом отправлен: {response[:100]}...")
                 
             except Exception as e:
@@ -304,9 +317,9 @@ class TelegramUserBotAdvanced(TelegramUserBot):
                 await event.edit(error_msg)
                 print(f"❌ Ошибка: {e}")
     
-    async def _handle_open_command(self, event, command_text: str):
-        """Обработка команды с флагом open (без контекста)"""
-        print(f"\n📝 Open команда: {command_text[:50]}...")
+    async def _handle_hide_command(self, event, command_text: str):
+        """Обработка команды с флагом hide (без контекста)"""
+        print(f"\n📝 Hide команда: {command_text[:50]}...")
         
         # Определяем тип команды из текста команды
         command_type = 'general'
@@ -344,18 +357,16 @@ class TelegramUserBotAdvanced(TelegramUserBot):
         # Показываем индикатор набора текста
         async with self.client.action(event.chat_id, 'typing'):
             try:
-                response = self.proxy_client.generate_text(
+                response = self.hide_client.generate_text(
                     final_prompt,
                     temperature=0.7,
                     max_tokens=1000,
                     top_p=0.9
                 )
                 
-                # Режим open: сохраняем исходный текст + добавляем ответ
-                original_text = event.message.message
-                full_response = f"{original_text}\n\nОтвет GPT:\n{response}"
-                await event.edit(full_response)
-                print(f"✅ Ответ (open режим) отправлен: {response[:100]}...")
+                # Режим hide: заменяем сообщение только ответом (от лица пользователя)
+                await event.edit(response)
+                print(f"✅ Ответ (hide режим) отправлен: {response[:100]}...")
                 
             except Exception as e:
                 error_msg = f"❌ Ошибка: {str(e)}"
@@ -385,15 +396,17 @@ class TelegramUserBotAdvanced(TelegramUserBot):
         # Показываем индикатор набора текста
         async with self.client.action(event.chat_id, 'typing'):
             try:
-                response = self.proxy_client.generate_text(
+                response = self.normal_client.generate_text(
                     final_prompt,
                     temperature=0.7,
-                    max_tokens=1000,  # Увеличиваем лимит для контекста
+                    max_tokens=1000,
                     top_p=0.9
                 )
                 
-                # Редактируем сообщение с ответом
-                await event.edit(response)
+                # Обычный режим: показываем исходный запрос + ответ
+                original_text = event.message.message
+                full_response = f"{original_text}\n\nОтвет GPT:\n{response}"
+                await event.edit(full_response)
                 print(f"✅ Ответ отправлен: {response[:100]}...")
                 
             except Exception as e:
