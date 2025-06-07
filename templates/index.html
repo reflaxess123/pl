@@ -346,6 +346,165 @@
               💾 Сохранить настройки
             </button>
           </div>
+
+          <!-- Автоответ -->
+          <div class="card">
+            <h3><span class="icon">🤖</span> Автоответ</h3>
+            <div class="input-group">
+              <label>
+                <input
+                  type="checkbox"
+                  id="auto-reply-enabled"
+                  {%
+                  if
+                  auto_reply_settings.enabled
+                  %}checked{%
+                  endif
+                  %}
+                  onchange="toggleAutoReply()"
+                />
+                Включить автоответ
+              </label>
+            </div>
+            <div class="input-group">
+              <label for="delay-min">Мин. задержка (сек):</label>
+              <input
+                type="number"
+                id="delay-min"
+                min="1"
+                max="60"
+                value="{{ auto_reply_settings.delay_min or 5 }}"
+              />
+            </div>
+            <div class="input-group">
+              <label for="delay-max">Макс. задержка (сек):</label>
+              <input
+                type="number"
+                id="delay-max"
+                min="1"
+                max="120"
+                value="{{ auto_reply_settings.delay_max or 15 }}"
+              />
+            </div>
+            <div class="input-group">
+              <label for="context-messages">Сообщений для контекста:</label>
+              <input
+                type="number"
+                id="context-messages"
+                min="1"
+                max="50"
+                value="{{ auto_reply_settings.context_messages or 10 }}"
+              />
+            </div>
+            <button class="btn btn-success" onclick="saveAutoReplySettings()">
+              💾 Сохранить настройки автоответа
+            </button>
+          </div>
+        </div>
+
+        <!-- Управление диалогами для автоответа -->
+        <div class="card">
+          <h3><span class="icon">💬</span> Диалоги с автоответом</h3>
+
+          <!-- Список диалогов для выбора -->
+          <div
+            style="
+              background: #e3f2fd;
+              padding: 15px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+            "
+          >
+            <h4>📋 Выберите диалоги для автоответа</h4>
+            <button class="btn btn-info" onclick="loadDialogs()">
+              🔄 Загрузить диалоги
+            </button>
+            <div id="dialogs-list" style="margin-top: 15px"></div>
+          </div>
+
+          <!-- Добавление нового чата вручную -->
+          <div
+            style="
+              background: #f8f9fa;
+              padding: 15px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+            "
+          >
+            <h4>➕ Добавить чат вручную</h4>
+            <div class="input-group">
+              <label for="new-chat-id">ID чата:</label>
+              <input
+                type="number"
+                id="new-chat-id"
+                placeholder="Например: -1001234567890"
+              />
+            </div>
+            <div class="input-group">
+              <label for="new-chat-name">Название чата:</label>
+              <input type="text" id="new-chat-name" placeholder="Мой друг" />
+            </div>
+            <button class="btn btn-success" onclick="addAutoReplyChat()">
+              ➕ Добавить чат
+            </button>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #6c757d">
+              💡 Или используйте список диалогов выше для быстрого добавления
+            </p>
+          </div>
+
+          <!-- Список чатов -->
+          <div id="auto-reply-chats">
+            {% for chat in auto_reply_chats %}
+            <div class="chat-item" data-chat-id="{{ chat.chat_id }}">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: 10px;
+                  border: 1px solid #e9ecef;
+                  border-radius: 6px;
+                  margin-bottom: 10px;
+                "
+              >
+                <div>
+                  <strong>{{ chat.name }}</strong><br />
+                  <small style="color: #6c757d">ID: {{ chat.chat_id }}</small>
+                </div>
+                <div>
+                  <label style="margin-right: 10px">
+                    <input
+                      type="checkbox"
+                      {%
+                      if
+                      chat.enabled
+                      %}checked{%
+                      endif
+                      %}
+                      onchange="toggleChatAutoReply({{ chat.chat_id }})"
+                    />
+                    Включен
+                  </label>
+                  <button
+                    class="btn btn-danger"
+                    style="padding: 5px 10px; font-size: 0.8rem"
+                    onclick="removeAutoReplyChat({{ chat.chat_id }})"
+                  >
+                    🗑️ Удалить
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <button
+            class="btn btn-info"
+            onclick="updateAutoReplyChatsList()"
+            style="margin-top: 10px"
+          >
+            🔄 Обновить список
+          </button>
         </div>
 
         <!-- Логи -->
@@ -555,10 +714,285 @@
           }
       }
 
-      // Обновляем логи каждые 3 секунды если бот работает
-      {% if is_bot_running %}
-      updateInterval = setInterval(updateLogs, 3000);
-      {% endif %}
+              // === Функции для управления автоответами ===
+
+        async function toggleAutoReply() {
+            const enabled = document.getElementById('auto-reply-enabled').checked;
+
+            try {
+                const response = await fetch('/api/auto-reply/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enabled })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert(`Автоответ ${enabled ? 'включен' : 'выключен'}!`);
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка переключения автоответа: ' + error.message, 'error');
+            }
+        }
+
+        async function saveAutoReplySettings() {
+            const delayMin = parseInt(document.getElementById('delay-min').value);
+            const delayMax = parseInt(document.getElementById('delay-max').value);
+            const contextMessages = parseInt(document.getElementById('context-messages').value);
+            const enabled = document.getElementById('auto-reply-enabled').checked;
+
+            try {
+                const response = await fetch('/api/auto-reply/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        delay_min: delayMin,
+                        delay_max: delayMax,
+                        context_messages: contextMessages,
+                        enabled: enabled
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert('Настройки автоответа сохранены!');
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка сохранения настроек автоответа: ' + error.message, 'error');
+            }
+        }
+
+        async function addAutoReplyChat() {
+            const chatId = document.getElementById('new-chat-id').value;
+            const chatName = document.getElementById('new-chat-name').value;
+
+            if (!chatId || !chatName) {
+                showAlert('Введите ID и название чата!', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auto-reply/chats/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: parseInt(chatId),
+                        chat_name: chatName
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert('Чат добавлен для автоответа!');
+                    document.getElementById('new-chat-id').value = '';
+                    document.getElementById('new-chat-name').value = '';
+                    updateAutoReplyChatsList();
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка добавления чата: ' + error.message, 'error');
+            }
+        }
+
+                async function removeAutoReplyChat(chatId) {
+            if (!confirm('Удалить чат из автоответа?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auto-reply/chats/remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert('Чат удален из автоответа!');
+                    updateAutoReplyChatsList();
+                    // Обновляем список диалогов если он загружен
+                    const dialogsList = document.getElementById('dialogs-list');
+                    if (dialogsList.children.length > 0 && !dialogsList.innerHTML.includes('Загрузка')) {
+                        loadDialogs();
+                    }
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка удаления чата: ' + error.message, 'error');
+            }
+        }
+
+        async function toggleChatAutoReply(chatId) {
+            try {
+                const response = await fetch('/api/auto-reply/chats/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert(data.message);
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка переключения автоответа: ' + error.message, 'error');
+            }
+        }
+
+                async function updateAutoReplyChatsList() {
+            try {
+                const response = await fetch('/api/auto-reply/chats');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const chatsContainer = document.getElementById('auto-reply-chats');
+                    chatsContainer.innerHTML = '';
+
+                    data.chats.forEach(chat => {
+                        const chatDiv = document.createElement('div');
+                        chatDiv.className = 'chat-item';
+                        chatDiv.dataset.chatId = chat.chat_id;
+
+                        chatDiv.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #e9ecef; border-radius: 6px; margin-bottom: 10px;">
+                                <div>
+                                    <strong>${chat.name}</strong><br>
+                                    <small style="color: #6c757d;">ID: ${chat.chat_id}</small>
+                                </div>
+                                <div>
+                                    <label style="margin-right: 10px;">
+                                        <input type="checkbox" ${chat.enabled ? 'checked' : ''}
+                                               onchange="toggleChatAutoReply(${chat.chat_id})">
+                                        Включен
+                                    </label>
+                                    <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8rem;"
+                                            onclick="removeAutoReplyChat(${chat.chat_id})">
+                                        🗑️ Удалить
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+
+                        chatsContainer.appendChild(chatDiv);
+                    });
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка обновления списка чатов:', error);
+            }
+        }
+
+        async function loadDialogs() {
+            const dialogsList = document.getElementById('dialogs-list');
+            dialogsList.innerHTML = '<p>⏳ Загрузка диалогов...</p>';
+
+            try {
+                const response = await fetch('/api/dialogs');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    dialogsList.innerHTML = '';
+
+                    if (data.dialogs.length === 0) {
+                        dialogsList.innerHTML = '<p>📭 Диалоги не найдены</p>';
+                        return;
+                    }
+
+                    data.dialogs.forEach(dialog => {
+                        const dialogDiv = document.createElement('div');
+                        dialogDiv.style.cssText = `
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            padding: 10px;
+                            border: 1px solid #dee2e6;
+                            border-radius: 6px;
+                            margin-bottom: 8px;
+                            background: ${dialog.auto_reply_enabled ? '#d1ecf1' : '#ffffff'};
+                        `;
+
+                        // Эмодзи для типа чата
+                        let typeEmoji = '💬';
+                        if (dialog.type === 'user') typeEmoji = '👤';
+                        else if (dialog.type === 'group') typeEmoji = '👥';
+                        else if (dialog.type === 'channel') typeEmoji = '📢';
+
+                        dialogDiv.innerHTML = `
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500;">
+                                    ${typeEmoji} ${dialog.name}
+                                    ${dialog.unread_count > 0 ? `<span style="background: #dc3545; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; margin-left: 5px;">${dialog.unread_count}</span>` : ''}
+                                </div>
+                                <small style="color: #6c757d;">
+                                    ID: ${dialog.chat_id} • Тип: ${dialog.type}
+                                    ${dialog.auto_reply_enabled ? ' • <strong style="color: #28a745;">Автоответ включен</strong>' : ''}
+                                </small>
+                            </div>
+                            <div>
+                                ${dialog.auto_reply_enabled ?
+                                    `<button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.8rem;" onclick="removeAutoReplyChat(${dialog.chat_id})">🔴 Выключить</button>` :
+                                    `<button class="btn btn-success" style="padding: 5px 10px; font-size: 0.8rem;" onclick="addDialogToAutoReply(${dialog.chat_id}, '${dialog.name.replace(/'/g, "\\'")}')">🟢 Включить</button>`
+                                }
+                            </div>
+                        `;
+
+                        dialogsList.appendChild(dialogDiv);
+                    });
+
+                    showAlert(`Загружено ${data.dialogs.length} диалогов`);
+                } else {
+                    dialogsList.innerHTML = `<p style="color: #dc3545;">❌ ${data.message}</p>`;
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                dialogsList.innerHTML = `<p style="color: #dc3545;">❌ Ошибка загрузки диалогов</p>`;
+                showAlert('Ошибка загрузки диалогов: ' + error.message, 'error');
+            }
+        }
+
+        async function addDialogToAutoReply(chatId, chatName) {
+            try {
+                const response = await fetch('/api/auto-reply/chats/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        chat_name: chatName
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showAlert('Диалог добавлен в автоответ!');
+                    loadDialogs(); // Перезагружаем список
+                    updateAutoReplyChatsList(); // Обновляем список активных чатов
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка добавления диалога: ' + error.message, 'error');
+            }
+        }
+
+        // Обновляем логи каждые 3 секунды если бот работает
+        {% if is_bot_running %}
+        updateInterval = setInterval(updateLogs, 3000);
+        {% endif %}
     </script>
   </body>
 </html>

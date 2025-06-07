@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
 
-from .telegram_client import TelegramUserBotAdvanced
+from .telegram_client import TelegramUserBotWithAutoReply
 from .proxy_api import ProxyAPIClient
 
 load_dotenv()
@@ -25,7 +25,7 @@ app = FastAPI(title="Telegram Bot Manager", description="Веб интерфей
 templates = Jinja2Templates(directory="templates")
 
 # Глобальные переменные для состояния бота
-bot_instance: Optional[TelegramUserBotAdvanced] = None
+bot_instance: Optional[TelegramUserBotWithAutoReply] = None
 bot_task: Optional[asyncio.Task] = None
 is_bot_running = False
 bot_logs: List[Dict] = []
@@ -63,12 +63,28 @@ async def main_page(request: Request):
     except Exception as e:
         balance_info = f"Ошибка: {str(e)}"
     
+    # Получаем информацию об автоответах
+    auto_reply_chats = []
+    auto_reply_settings = {}
+    if bot_instance:
+        auto_reply_chats = [
+            {
+                "chat_id": chat_id,
+                "name": info["name"],
+                "enabled": info["enabled"]
+            }
+            for chat_id, info in bot_instance.get_auto_reply_chats().items()
+        ]
+        auto_reply_settings = bot_instance.get_auto_reply_settings()
+    
     return templates.TemplateResponse("index.html", {
         "request": request,
         "is_bot_running": is_bot_running,
         "balance": balance_info,
         "bot_logs": bot_logs[-10:],  # Последние 10 записей
-        "settings": bot_settings
+        "settings": bot_settings,
+        "auto_reply_chats": auto_reply_chats,
+        "auto_reply_settings": auto_reply_settings
     })
 
 @app.post("/bot/start")
@@ -80,8 +96,8 @@ async def start_bot(background_tasks: BackgroundTasks):
         return JSONResponse({"status": "error", "message": "Бот уже запущен"})
     
     try:
-        bot_instance = TelegramUserBotAdvanced()
-        add_log("INFO", "Создан экземпляр бота")
+        bot_instance = TelegramUserBotWithAutoReply()
+        add_log("INFO", "Создан экземпляр бота с автоответом")
         
         # Запускаем бота в фоновой задаче
         async def run_bot():
@@ -181,6 +197,30 @@ async def get_logs():
     """Получить логи"""
     return JSONResponse({"logs": bot_logs})
 
+@app.get("/api/auto-reply/stats")
+async def get_auto_reply_stats():
+    """Получить статистику автоответов"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        # Подсчитываем статистику из логов
+        auto_reply_logs = [log for log in bot_logs if "автоответ" in log["message"].lower()]
+        skip_logs = [log for log in bot_logs if "пропустить" in log["message"].lower()]
+        sent_logs = [log for log in bot_logs if "автоответ отправлен" in log["message"].lower()]
+        
+        stats = {
+            "total_auto_replies": len(auto_reply_logs),
+            "skipped_messages": len(skip_logs),
+            "sent_messages": len(sent_logs),
+            "active_chats": len(bot_instance.get_auto_reply_chats()),
+            "recent_activity": auto_reply_logs[-5:] if auto_reply_logs else []
+        }
+        
+        return JSONResponse({"status": "success", "stats": stats})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+
 @app.post("/api/settings")
 async def update_settings(request: Request):
     """Обновить настройки бота"""
@@ -210,6 +250,147 @@ async def update_settings(request: Request):
 async def get_settings():
     """Получить текущие настройки"""
     return JSONResponse({"settings": bot_settings})
+
+# === API для управления автоответами ===
+
+@app.get("/api/auto-reply/chats")
+async def get_auto_reply_chats():
+    """Получить список чатов с автоответом"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        chats = bot_instance.get_auto_reply_chats()
+        chats_list = [
+            {
+                "chat_id": chat_id,
+                "name": info["name"],
+                "enabled": info["enabled"],
+                "last_activity": info.get("last_activity")
+            }
+            for chat_id, info in chats.items()
+        ]
+        return JSONResponse({"status": "success", "chats": chats_list})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.get("/api/dialogs")
+async def get_dialogs():
+    """Получить список всех диалогов пользователя"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        dialogs = await bot_instance.get_dialogs_list(limit=100)
+        return JSONResponse({"status": "success", "dialogs": dialogs})
+    except Exception as e:
+        add_log("ERROR", f"Ошибка получения диалогов: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.post("/api/auto-reply/chats/add")
+async def add_auto_reply_chat(request: Request):
+    """Добавить чат для автоответа"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        data = await request.json()
+        chat_id = int(data.get("chat_id", 0))
+        chat_name = data.get("chat_name", f"Chat {chat_id}")
+        
+        if chat_id == 0:
+            return JSONResponse({"status": "error", "message": "Неверный ID чата"})
+        
+        success = bot_instance.add_auto_reply_chat(chat_id, chat_name)
+        
+        if success:
+            add_log("INFO", f"Добавлен чат для автоответа: {chat_name}")
+            return JSONResponse({"status": "success", "message": "Чат добавлен"})
+        else:
+            return JSONResponse({"status": "error", "message": "Ошибка добавления чата"})
+            
+    except Exception as e:
+        add_log("ERROR", f"Ошибка добавления чата: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.post("/api/auto-reply/chats/remove")
+async def remove_auto_reply_chat(request: Request):
+    """Удалить чат из автоответа"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        data = await request.json()
+        chat_id = int(data.get("chat_id", 0))
+        
+        success = bot_instance.remove_auto_reply_chat(chat_id)
+        
+        if success:
+            add_log("INFO", f"Удален чат из автоответа: {chat_id}")
+            return JSONResponse({"status": "success", "message": "Чат удален"})
+        else:
+            return JSONResponse({"status": "error", "message": "Чат не найден"})
+            
+    except Exception as e:
+        add_log("ERROR", f"Ошибка удаления чата: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.post("/api/auto-reply/chats/toggle")
+async def toggle_auto_reply_chat(request: Request):
+    """Переключить статус автоответа для чата"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        data = await request.json()
+        chat_id = int(data.get("chat_id", 0))
+        
+        success = bot_instance.toggle_auto_reply_chat(chat_id)
+        
+        if success:
+            chats = bot_instance.get_auto_reply_chats()
+            status = "включен" if chats[chat_id]["enabled"] else "выключен"
+            add_log("INFO", f"Автоответ для чата {chat_id}: {status}")
+            return JSONResponse({"status": "success", "message": f"Автоответ {status}"})
+        else:
+            return JSONResponse({"status": "error", "message": "Чат не найден"})
+            
+    except Exception as e:
+        add_log("ERROR", f"Ошибка переключения статуса: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.get("/api/auto-reply/settings")
+async def get_auto_reply_settings():
+    """Получить настройки автоответа"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        settings = bot_instance.get_auto_reply_settings()
+        return JSONResponse({"status": "success", "settings": settings})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)})
+
+@app.post("/api/auto-reply/settings")
+async def update_auto_reply_settings(request: Request):
+    """Обновить настройки автоответа"""
+    if not bot_instance:
+        return JSONResponse({"status": "error", "message": "Бот не запущен"})
+    
+    try:
+        data = await request.json()
+        
+        success = bot_instance.update_auto_reply_settings(data)
+        
+        if success:
+            add_log("INFO", "Настройки автоответа обновлены")
+            return JSONResponse({"status": "success", "message": "Настройки сохранены"})
+        else:
+            return JSONResponse({"status": "error", "message": "Ошибка обновления настроек"})
+            
+    except Exception as e:
+        add_log("ERROR", f"Ошибка обновления настроек автоответа: {str(e)}")
+        return JSONResponse({"status": "error", "message": str(e)})
 
 def run_web_interface(host: str = "127.0.0.1", port: int = 8000):
     """Запуск веб интерфейса"""

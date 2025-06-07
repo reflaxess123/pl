@@ -5,7 +5,8 @@ Telegram userbot для работы с ProxyAPI GPT-4o mini
 import os
 import re
 import asyncio
-from typing import Optional
+import json
+from typing import Optional, Dict, Set, List
 from telethon import TelegramClient, events
 from telethon.tl.types import Message
 from dotenv import load_dotenv
@@ -438,12 +439,323 @@ class TelegramUserBotAdvanced(TelegramUserBot):
                 print(f"❌ Ошибка: {e}")
 
 
+class TelegramUserBotWithAutoReply(TelegramUserBotAdvanced):
+    """Расширенная версия userbot с функцией автоответа"""
+    
+    def __init__(self):
+        super().__init__()
+        
+        # Настройки автоответа
+        self.auto_reply_chats: Dict[int, Dict] = {}  # {chat_id: {"enabled": True, "name": "Chat Name", "last_activity": timestamp}}
+        self.auto_reply_settings = {
+            "delay_min": 5,    # Минимальная задержка в секундах
+            "delay_max": 15,   # Максимальная задержка в секундах
+            "context_messages": 10,  # Количество сообщений для контекста
+            "enabled": True    # Глобальное включение/выключение
+        }
+        
+        # Системный промпт для автоответа
+        self.auto_reply_prompt = (
+            "РЕЖИМ: ТЫ ПОЛЬЗОВАТЕЛЬ! Отвечай только от первого лица ('я', 'мне', 'мой')! "
+            "Ты НЕ ассистент, НЕ помощник, а сам человек который пишет в чате. "
+            "Анализируй контекст беседы и отвечай естественно, как обычный человек. "
+            "Используй разговорную речь, будь дружелюбным и естественным. "
+            "Отвечай кратко и по делу, как в обычной переписке. "
+            "ЗАПРЕЩЕНО говорить от третьего лица или как советчик! "
+            "\nПРАВИЛА ПРОПУСКА ОТВЕТОВ:"
+            "- Если это просто стикер или эмодзи без текста - отвечай 'SKIP'"
+            "- Если это сообщение типа 'ок', 'хорошо', 'понятно' без вопроса - отвечай 'SKIP'"
+            "- Если сообщение не требует реакции (например, техническое уведомление) - отвечай 'SKIP'"
+            "- В остальных случаях отвечай естественно и по существу"
+        )
+        
+        self.auto_reply_client = ProxyAPIClient(system_prompt=self.auto_reply_prompt)
+        
+        # Список последних обработанных сообщений (избегаем дублирования)
+        self.processed_messages: Set[int] = set()
+    
+    async def start(self):
+        """Запуск userbot с автоответом"""
+        print("🚀 Запуск Telegram UserBot с автоответом...")
+        
+        await self.client.start(phone=self.phone)
+        
+        me = await self.client.get_me()
+        print(f"✅ Авторизован как: {me.first_name} (@{me.username})")
+        print("📱 UserBot активен!")
+        print("🤖 Автоответ включен для выбранных диалогов")
+        print("🛑 Для остановки нажмите Ctrl+C")
+        
+        # Регистрируем обработчик исходящих сообщений (команды @gpt)
+        @self.client.on(events.NewMessage(outgoing=True))
+        async def handle_outgoing_message(event):
+            await self._process_message(event)
+        
+        # Регистрируем обработчик входящих сообщений (автоответ)
+        @self.client.on(events.NewMessage(incoming=True))
+        async def handle_incoming_message(event):
+            await self._process_auto_reply(event)
+        
+        # Запускаем клиент
+        await self.client.run_until_disconnected()
+    
+    async def _process_auto_reply(self, event):
+        """Обработка входящих сообщений для автоответа"""
+        try:
+            # Проверяем глобальное включение автоответа
+            if not self.auto_reply_settings.get("enabled", True):
+                return
+            
+            chat_id = event.chat_id
+            message_id = event.message.id
+            
+            # Избегаем повторной обработки
+            if message_id in self.processed_messages:
+                return
+            
+            # Проверяем, включен ли автоответ для этого чата
+            if chat_id not in self.auto_reply_chats or not self.auto_reply_chats[chat_id].get("enabled", False):
+                return
+            
+            # Проверяем, что это текстовое сообщение
+            if not event.message.message or not event.message.message.strip():
+                return
+            
+            # Добавляем в обработанные
+            self.processed_messages.add(message_id)
+            
+            # Ограничиваем размер множества обработанных сообщений
+            if len(self.processed_messages) > 1000:
+                # Оставляем только последние 500
+                self.processed_messages = set(list(self.processed_messages)[-500:])
+            
+            # Получаем информацию о сообщении
+            message_text = event.message.message or ""
+            sender_info = "Unknown"
+            
+            try:
+                sender = await event.get_sender()
+                if sender:
+                    sender_info = getattr(sender, 'first_name', 'Unknown') or getattr(sender, 'username', 'Unknown') or 'Unknown'
+            except:
+                pass
+            
+            print(f"\n🤖 Автоответ: получено сообщение в чате {chat_id}")
+            print(f"👤 От: {sender_info}")
+            print(f"📝 Текст: '{message_text[:100]}{'...' if len(message_text) > 100 else ''}'")
+            print(f"📊 Тип: {type(event.message.media).__name__ if event.message.media else 'текст'}")
+            
+            # Получаем контекст
+            context = await self._get_auto_reply_context(event)
+            
+            # Формируем промпт
+            prompt = f"{context}\n\nНовое сообщение: {message_text}\n\nОтветь естественно:"
+            
+            # Добавляем случайную задержку
+            import random
+            delay = random.randint(
+                self.auto_reply_settings["delay_min"],
+                self.auto_reply_settings["delay_max"]
+            )
+            
+            print(f"⏱️ Задержка перед ответом: {delay} сек")
+            await asyncio.sleep(delay)
+            
+            # Показываем индикатор набора текста
+            async with self.client.action(chat_id, 'typing'):
+                await asyncio.sleep(1)  # Имитируем печатание
+                
+                try:
+                    response = self.auto_reply_client.generate_text(
+                        prompt,
+                        temperature=0.8,
+                        max_tokens=300,
+                        top_p=0.9
+                    )
+                    
+                    # Проверяем, нужно ли пропустить ответ
+                    if response.strip().upper() == 'SKIP':
+                        print("⏭️ GPT решил пропустить этот ответ")
+                        print(f"🔍 Возможные причины: стикер, фото без текста, неуместно отвечать")
+                        print(f"💭 Сообщение было: '{message_text[:50]}{'...' if len(message_text) > 50 else ''}'")
+                        return
+                    
+                    # Отправляем ответ
+                    await self.client.send_message(chat_id, response)
+                    print(f"✅ Автоответ отправлен: {response[:100]}...")
+                    print(f"📊 Длина ответа: {len(response)} символов")
+                    
+                except Exception as e:
+                    print(f"❌ Ошибка автоответа: {e}")
+                    
+        except Exception as e:
+            print(f"❌ Ошибка обработки автоответа: {e}")
+    
+    async def _get_auto_reply_context(self, event, limit: int = None) -> str:
+        """Получение контекста для автоответа"""
+        if limit is None:
+            limit = self.auto_reply_settings.get("context_messages", 10)
+            
+        try:
+            messages = []
+            
+            async for message in self.client.iter_messages(
+                event.chat_id,
+                limit=limit + 5,  # Берем больше для фильтрации
+                reverse=False
+            ):
+                # Пропускаем текущее сообщение
+                if message.id == event.message.id:
+                    continue
+                
+                # Берем только текстовые сообщения
+                if message.message and message.message.strip():
+                    # Определяем отправителя
+                    if message.out:
+                        sender = "Вы"
+                    else:
+                        sender_user = await message.get_sender()
+                        if sender_user:
+                            sender = getattr(sender_user, 'first_name', 'Собеседник') or 'Собеседник'
+                        else:
+                            sender = 'Собеседник'
+                    
+                    messages.append(f"{sender}: {message.message}")
+                    
+                    if len(messages) >= limit:
+                        break
+            
+            if messages:
+                # Разворачиваем для хронологического порядка
+                context_messages = "\n".join(reversed(messages))
+                return f"Контекст беседы:\n{context_messages}"
+            
+            return "Начало беседы."
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка получения контекста для автоответа: {e}")
+            return "Контекст недоступен."
+    
+    def add_auto_reply_chat(self, chat_id: int, chat_name: str = "Unknown") -> bool:
+        """Добавить чат для автоответа"""
+        try:
+            self.auto_reply_chats[chat_id] = {
+                "enabled": True,
+                "name": chat_name,
+                "last_activity": None
+            }
+            print(f"✅ Добавлен чат для автоответа: {chat_name} ({chat_id})")
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка добавления чата: {e}")
+            return False
+    
+    def remove_auto_reply_chat(self, chat_id: int) -> bool:
+        """Удалить чат из автоответа"""
+        try:
+            if chat_id in self.auto_reply_chats:
+                chat_name = self.auto_reply_chats[chat_id].get("name", "Unknown")
+                del self.auto_reply_chats[chat_id]
+                print(f"✅ Удален чат из автоответа: {chat_name} ({chat_id})")
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ Ошибка удаления чата: {e}")
+            return False
+    
+    def toggle_auto_reply_chat(self, chat_id: int) -> bool:
+        """Переключить статус автоответа для чата"""
+        try:
+            if chat_id in self.auto_reply_chats:
+                current_status = self.auto_reply_chats[chat_id].get("enabled", False)
+                self.auto_reply_chats[chat_id]["enabled"] = not current_status
+                chat_name = self.auto_reply_chats[chat_id].get("name", "Unknown")
+                status = "включен" if not current_status else "выключен"
+                print(f"✅ Автоответ для {chat_name}: {status}")
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ Ошибка переключения статуса: {e}")
+            return False
+    
+    def get_auto_reply_chats(self) -> Dict[int, Dict]:
+        """Получить список чатов с автоответом"""
+        return self.auto_reply_chats.copy()
+    
+    def update_auto_reply_settings(self, settings: Dict) -> bool:
+        """Обновить настройки автоответа"""
+        try:
+            if "delay_min" in settings:
+                self.auto_reply_settings["delay_min"] = max(1, int(settings["delay_min"]))
+            if "delay_max" in settings:
+                self.auto_reply_settings["delay_max"] = max(self.auto_reply_settings["delay_min"], int(settings["delay_max"]))
+            if "context_messages" in settings:
+                self.auto_reply_settings["context_messages"] = max(1, min(50, int(settings["context_messages"])))
+            if "enabled" in settings:
+                self.auto_reply_settings["enabled"] = bool(settings["enabled"])
+            
+            print("✅ Настройки автоответа обновлены")
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка обновления настроек: {e}")
+            return False
+    
+    def get_auto_reply_settings(self) -> Dict:
+        """Получить настройки автоответа"""
+        return self.auto_reply_settings.copy()
+    
+    async def get_dialogs_list(self, limit: int = 50) -> List[Dict]:
+        """Получить список диалогов пользователя"""
+        try:
+            dialogs = []
+            
+            async for dialog in self.client.iter_dialogs(limit=limit):
+                # Получаем информацию о диалоге
+                chat_id = dialog.id
+                
+                # Определяем название и тип
+                if dialog.is_user:
+                    # Личный диалог
+                    name = dialog.name or f"User {chat_id}"
+                    chat_type = "user"
+                elif dialog.is_group:
+                    # Группа
+                    name = dialog.name or f"Group {chat_id}"
+                    chat_type = "group"
+                elif dialog.is_channel:
+                    # Канал
+                    name = dialog.name or f"Channel {chat_id}"
+                    chat_type = "channel"
+                else:
+                    # Другое
+                    name = dialog.name or f"Chat {chat_id}"
+                    chat_type = "other"
+                
+                # Проверяем, есть ли этот чат в автоответах
+                is_auto_reply_enabled = chat_id in self.auto_reply_chats and self.auto_reply_chats[chat_id].get("enabled", False)
+                
+                dialogs.append({
+                    "chat_id": chat_id,
+                    "name": name,
+                    "type": chat_type,
+                    "unread_count": dialog.unread_count,
+                    "auto_reply_enabled": is_auto_reply_enabled
+                })
+            
+            print(f"📋 Получено {len(dialogs)} диалогов")
+            return dialogs
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения диалогов: {e}")
+            return []
+
+
 async def main():
     """Основная функция для запуска userbot"""
     try:
         # Можно выбрать обычную или расширенную версию
         # bot = TelegramUserBot()  # Простая версия
-        bot = TelegramUserBotAdvanced()  # Расширенная версия
+        bot = TelegramUserBotWithAutoReply()  # Расширенная версия
         
         await bot.start()
         
