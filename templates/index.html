@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Telegram Bot Manager</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 25px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        margin-top: 10px;
+      }
+
+      .status-online {
+        background: #27ae60;
+        color: white;
+      }
+
+      .status-offline {
+        background: #e74c3c;
+        color: white;
+      }
+
+      .main-content {
+        padding: 30px;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px;
+        margin-bottom: 30px;
+      }
+
+      .card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 25px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+      }
+
+      .card h3 {
+        color: #2c3e50;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .icon {
+        font-size: 1.5rem;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        margin: 5px;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+      }
+
+      .btn-success {
+        background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+      }
+
+      .btn-danger {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      }
+
+      .btn-info {
+        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+      }
+
+      .input-group {
+        margin-bottom: 15px;
+      }
+
+      .input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #2c3e50;
+      }
+
+      .input-group input,
+      .input-group textarea {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e9ecef;
+        border-radius: 6px;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+      }
+
+      .input-group input:focus,
+      .input-group textarea:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .logs {
+        background: #2c3e50;
+        color: #ecf0f1;
+        border-radius: 8px;
+        padding: 20px;
+        max-height: 300px;
+        overflow-y: auto;
+        font-family: "Courier New", monospace;
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+
+      .log-entry {
+        margin-bottom: 8px;
+        padding: 5px;
+        border-radius: 4px;
+      }
+
+      .log-info {
+        background: rgba(52, 152, 219, 0.2);
+      }
+
+      .log-error {
+        background: rgba(231, 76, 60, 0.2);
+      }
+
+      .balance {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #27ae60;
+      }
+
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+
+      .response-area {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+        min-height: 100px;
+        white-space: pre-wrap;
+      }
+
+      .alert {
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-weight: 500;
+      }
+
+      .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .alert-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      @media (max-width: 768px) {
+        .dashboard {
+          grid-template-columns: 1fr;
+        }
+
+        .header h1 {
+          font-size: 2rem;
+        }
+
+        .main-content {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🤖 Telegram Bot Manager</h1>
+        <div
+          class="status-badge {% if is_bot_running %}status-online{% else %}status-offline{% endif %}"
+          id="status-badge"
+        >
+          {% if is_bot_running %} 🟢 Бот онлайн {% else %} 🔴 Бот офлайн {%
+          endif %}
+        </div>
+      </div>
+
+      <div class="main-content">
+        <!-- Уведомления -->
+        <div id="alerts"></div>
+
+        <div class="dashboard">
+          <!-- Управление ботом -->
+          <div class="card">
+            <h3><span class="icon">⚡</span> Управление ботом</h3>
+            <div style="margin-bottom: 15px">
+              <button
+                class="btn btn-success"
+                onclick="startBot()"
+                id="start-btn"
+                {%
+                if
+                is_bot_running
+                %}style="display:none"
+                {%
+                endif
+                %}
+              >
+                🚀 Запустить бота
+              </button>
+              <button
+                class="btn btn-danger"
+                onclick="stopBot()"
+                id="stop-btn"
+                {%
+                if
+                not
+                is_bot_running
+                %}style="display:none"
+                {%
+                endif
+                %}
+              >
+                🛑 Остановить бота
+              </button>
+            </div>
+            <div class="balance">
+              💰 Баланс: <span id="balance">{{ balance }}</span>
+            </div>
+            <button class="btn btn-info" onclick="updateBalance()">
+              🔄 Обновить баланс
+            </button>
+          </div>
+
+          <!-- Тестирование GPT -->
+          <div class="card">
+            <h3><span class="icon">🧠</span> Тест GPT</h3>
+            <div class="input-group">
+              <label for="test-prompt">Введите текст для тестирования:</label>
+              <textarea
+                id="test-prompt"
+                rows="3"
+                placeholder="Привет! Как дела?"
+              ></textarea>
+            </div>
+            <button class="btn" onclick="testGPT()">🔍 Тестировать GPT</button>
+            <div
+              id="gpt-response"
+              class="response-area"
+              style="display: none"
+            ></div>
+          </div>
+
+          <!-- Настройки -->
+          <div class="card">
+            <h3><span class="icon">⚙️</span> Настройки</h3>
+            <div class="input-group">
+              <label for="temperature">Temperature (0.0-1.0):</label>
+              <input
+                type="number"
+                id="temperature"
+                min="0"
+                max="1"
+                step="0.1"
+                value="{{ settings.temperature }}"
+              />
+            </div>
+            <div class="input-group">
+              <label for="max-tokens">Max Tokens:</label>
+              <input
+                type="number"
+                id="max-tokens"
+                min="50"
+                max="2000"
+                value="{{ settings.max_tokens }}"
+              />
+            </div>
+            <button class="btn btn-success" onclick="saveSettings()">
+              💾 Сохранить настройки
+            </button>
+          </div>
+        </div>
+
+        <!-- Логи -->
+        <div class="card">
+          <h3><span class="icon">📋</span> Логи бота</h3>
+          <div class="logs" id="logs">
+            {% for log in bot_logs %}
+            <div class="log-entry log-{{ log.level.lower() }}">
+              [{{ log.timestamp }}] {{ log.level }}: {{ log.message }}
+            </div>
+            {% endfor %}
+          </div>
+          <button
+            class="btn btn-info"
+            onclick="updateLogs()"
+            style="margin-top: 10px"
+          >
+            🔄 Обновить логи
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let updateInterval;
+
+      function showAlert(message, type = 'success') {
+          const alertsDiv = document.getElementById('alerts');
+          const alert = document.createElement('div');
+          alert.className = `alert alert-${type}`;
+          alert.textContent = message;
+          alertsDiv.appendChild(alert);
+
+          setTimeout(() => {
+              alert.remove();
+          }, 5000);
+      }
+
+      async function startBot() {
+          const startBtn = document.getElementById('start-btn');
+          const stopBtn = document.getElementById('stop-btn');
+          const statusBadge = document.getElementById('status-badge');
+
+          startBtn.disabled = true;
+          startBtn.textContent = '⏳ Запуск...';
+
+          try {
+              const response = await fetch('/bot/start', { method: 'POST' });
+              const data = await response.json();
+
+              if (data.status === 'success') {
+                  showAlert('Бот успешно запущен!');
+                  startBtn.style.display = 'none';
+                  stopBtn.style.display = 'inline-block';
+                  statusBadge.className = 'status-badge status-online';
+                  statusBadge.textContent = '🟢 Бот онлайн';
+
+                  // Начинаем обновлять логи
+                  if (!updateInterval) {
+                      updateInterval = setInterval(updateLogs, 3000);
+                  }
+              } else {
+                  showAlert(data.message, 'error');
+              }
+          } catch (error) {
+              showAlert('Ошибка запуска бота: ' + error.message, 'error');
+          }
+
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 Запустить бота';
+      }
+
+      async function stopBot() {
+          const startBtn = document.getElementById('start-btn');
+          const stopBtn = document.getElementById('stop-btn');
+          const statusBadge = document.getElementById('status-badge');
+
+          stopBtn.disabled = true;
+          stopBtn.textContent = '⏳ Остановка...';
+
+          try {
+              const response = await fetch('/bot/stop', { method: 'POST' });
+              const data = await response.json();
+
+              if (data.status === 'success') {
+                  showAlert('Бот остановлен!');
+                  startBtn.style.display = 'inline-block';
+                  stopBtn.style.display = 'none';
+                  statusBadge.className = 'status-badge status-offline';
+                  statusBadge.textContent = '🔴 Бот офлайн';
+
+                  // Останавливаем обновление логов
+                  if (updateInterval) {
+                      clearInterval(updateInterval);
+                      updateInterval = null;
+                  }
+              } else {
+                  showAlert(data.message, 'error');
+              }
+          } catch (error) {
+              showAlert('Ошибка остановки бота: ' + error.message, 'error');
+          }
+
+          stopBtn.disabled = false;
+          stopBtn.textContent = '🛑 Остановить бота';
+      }
+
+      async function updateBalance() {
+          const balanceSpan = document.getElementById('balance');
+          const originalText = balanceSpan.textContent;
+          balanceSpan.textContent = '⏳ Загрузка...';
+
+          try {
+              const response = await fetch('/api/balance');
+              const data = await response.json();
+
+              if (data.status === 'success') {
+                  balanceSpan.textContent = `${data.balance.toFixed(2)} ₽`;
+              } else {
+                  balanceSpan.textContent = `Ошибка: ${data.message}`;
+              }
+          } catch (error) {
+              balanceSpan.textContent = originalText;
+              showAlert('Ошибка получения баланса: ' + error.message, 'error');
+          }
+      }
+
+      async function testGPT() {
+          const prompt = document.getElementById('test-prompt').value;
+          const responseDiv = document.getElementById('gpt-response');
+
+          if (!prompt.trim()) {
+              showAlert('Введите текст для тестирования!', 'error');
+              return;
+          }
+
+          responseDiv.style.display = 'block';
+          responseDiv.textContent = '⏳ GPT думает...';
+
+          try {
+              const response = await fetch('/api/test-gpt', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ prompt: prompt })
+              });
+
+              const data = await response.json();
+
+              if (data.status === 'success') {
+                  responseDiv.textContent = data.response;
+                  showAlert('GPT тест выполнен успешно!');
+              } else {
+                  responseDiv.textContent = `Ошибка: ${data.message}`;
+                  showAlert(data.message, 'error');
+              }
+          } catch (error) {
+              responseDiv.textContent = `Ошибка: ${error.message}`;
+              showAlert('Ошибка тестирования GPT: ' + error.message, 'error');
+          }
+      }
+
+      async function saveSettings() {
+          const temperature = parseFloat(document.getElementById('temperature').value);
+          const maxTokens = parseInt(document.getElementById('max-tokens').value);
+
+          try {
+              const response = await fetch('/api/settings', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      temperature: temperature,
+                      max_tokens: maxTokens
+                  })
+              });
+
+              const data = await response.json();
+
+              if (data.status === 'success') {
+                  showAlert('Настройки сохранены!');
+              } else {
+                  showAlert(data.message, 'error');
+              }
+          } catch (error) {
+              showAlert('Ошибка сохранения настроек: ' + error.message, 'error');
+          }
+      }
+
+      async function updateLogs() {
+          try {
+              const response = await fetch('/api/logs');
+              const data = await response.json();
+
+              const logsDiv = document.getElementById('logs');
+              logsDiv.innerHTML = '';
+
+              data.logs.slice(-10).forEach(log => {
+                  const logEntry = document.createElement('div');
+                  logEntry.className = `log-entry log-${log.level.toLowerCase()}`;
+                  logEntry.textContent = `[${log.timestamp}] ${log.level}: ${log.message}`;
+                  logsDiv.appendChild(logEntry);
+              });
+
+              // Автоскролл вниз
+              logsDiv.scrollTop = logsDiv.scrollHeight;
+          } catch (error) {
+              console.error('Ошибка обновления логов:', error);
+          }
+      }
+
+      // Обновляем логи каждые 3 секунды если бот работает
+      {% if is_bot_running %}
+      updateInterval = setInterval(updateLogs, 3000);
+      {% endif %}
+    </script>
+  </body>
+</html>
